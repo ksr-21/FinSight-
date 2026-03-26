@@ -1,11 +1,19 @@
 import { GoogleGenAI } from "@google/genai";
 import { Transaction, Category } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+// Helper to get the AI instance, avoiding top-level crashes if API key is missing
+const getAiInstance = () => {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("An API Key must be set when running in a browser");
+  }
+  return new GoogleGenAI({ apiKey });
+};
 
 export const geminiService = {
   // Auto-categorize a transaction description
   categorizeTransaction: async (description: string): Promise<Category> => {
+    const ai = getAiInstance();
     const model = "gemini-3-flash-preview";
     const prompt = `Categorize this financial transaction description into one of these categories: ${Object.values(Category).join(", ")}. 
     Description: "${description}"
@@ -26,6 +34,7 @@ export const geminiService = {
 
   // Generate spending insights and suggestions
   getFinancialInsights: async (transactions: Transaction[], budgets: any[]): Promise<string[]> => {
+    const ai = getAiInstance();
     const model = "gemini-3-flash-preview";
     const summary = transactions.slice(0, 20).map(t => `${t.date}: ${t.description} - ${t.amount} (${t.category})`).join("\n");
     const prompt = `Analyze these recent transactions and provide 3 actionable financial tips or observations. 
@@ -49,6 +58,7 @@ export const geminiService = {
 
   // Chatbot response
   getChatResponse: async (message: string, context: { transactions: Transaction[], balance: number }): Promise<string> => {
+    const ai = getAiInstance();
     const model = "gemini-3-flash-preview";
     const prompt = `You are FinSight AI, a professional financial assistant. 
     User Question: "${message}"
@@ -69,6 +79,7 @@ export const geminiService = {
 
   // Predict future expenses
   getExpenseForecast: async (transactions: Transaction[]): Promise<{ nextWeek: number, nextMonth: number, reasoning: string }> => {
+    const ai = getAiInstance();
     const model = "gemini-3-flash-preview";
     const expenses = transactions.filter(t => t.type === 'Expense');
     const summary = expenses.slice(0, 50).map(t => `${t.date}: ${t.amount} (${t.category})`).join("\n");

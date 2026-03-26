@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BrowserRouter } from 'react-router-dom';
+import { HashRouter } from 'react-router-dom';
 import App from './App';
 import LandingPage from './components/LandingPage';
 import { User } from './types';
@@ -15,9 +15,9 @@ const Site: React.FC = () => {
 
   if (showApp) {
     return (
-      <BrowserRouter>
+      <HashRouter>
         <App user={guestUser} />
-      </BrowserRouter>
+      </HashRouter>
     );
   }
   
