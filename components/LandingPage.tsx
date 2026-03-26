@@ -3,10 +3,10 @@ import React from 'react';
 import { ChartPieIcon, SparklesIcon, ChatBubbleOvalLeftEllipsisIcon, DocumentMagnifyingGlassIcon, CheckIcon, SunIcon } from './icons';
 
 interface LandingPageProps {
-  onLogin: () => void;
+  onLaunchApp: () => void;
 }
 
-const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
+const LandingPage: React.FC<LandingPageProps> = ({ onLaunchApp }) => {
   return (
     <div className="bg-background dark:bg-gray-900 text-text-primary dark:text-white">
       {/* Header */}
@@ -19,7 +19,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
             </div>
             <div className="flex items-center">
               <button
-                onClick={onLogin}
+                onClick={onLaunchApp}
                 className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition-colors"
               >
                 Launch App
@@ -41,7 +41,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
             </p>
             <div className="mt-8">
               <button
-                onClick={onLogin}
+                onClick={onLaunchApp}
                 className="px-8 py-3 bg-primary text-white text-lg font-semibold rounded-lg shadow-lg hover:bg-indigo-700 transform hover:scale-105 transition-transform"
               >
                 Get Started for Free

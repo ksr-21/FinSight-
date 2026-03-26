@@ -1,4 +1,5 @@
 
+
 import React, { useMemo } from 'react';
 import { Transaction, Category, Currency, CURRENCY_SYMBOLS } from '../types';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -19,7 +20,8 @@ const CategoryPieChart: React.FC<CategoryPieChartProps> = ({ transactions, curre
 
     return Object.entries(categoryTotals)
       .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
+      // FIX: Explicitly cast values to Number to resolve TypeScript error in arithmetic operation.
+      .sort((a, b) => Number(b.value) - Number(a.value));
   }, [transactions]);
 
   if (data.length === 0) {
@@ -29,27 +31,54 @@ const CategoryPieChart: React.FC<CategoryPieChartProps> = ({ transactions, curre
   const currencySymbol = CURRENCY_SYMBOLS[currency];
 
   return (
-    <div style={{ width: '100%', height: 300 }}>
-        <ResponsiveContainer>
-            <PieChart>
-                <Pie
-                    data={data}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                    nameKey="name"
-                >
-                    {data.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                </Pie>
-                <Tooltip formatter={(value: number) => `${currencySymbol}${value.toFixed(2)}`} />
-                <Legend />
-            </PieChart>
+    <div className="bg-white dark:bg-gray-800 p-8 rounded-[2rem] shadow-sm border border-gray-100 dark:border-gray-700 h-full">
+      <div className="flex items-center justify-between mb-8">
+        <h3 className="text-xl font-bold text-text-primary dark:text-white tracking-tight">Category Mix</h3>
+        <span className="text-xs font-mono text-text-secondary dark:text-gray-400 uppercase tracking-widest">Expense Share</span>
+      </div>
+      
+      <div className="h-[250px] w-full relative">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={data}
+              cx="50%"
+              cy="50%"
+              innerRadius={60}
+              outerRadius={80}
+              paddingAngle={5}
+              dataKey="value"
+              stroke="none"
+            >
+              {data.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip 
+              contentStyle={{ backgroundColor: '#000', border: 'none', borderRadius: '12px', color: '#fff' }}
+              itemStyle={{ color: '#fff' }}
+              formatter={(value: number) => [`${currencySymbol}${value.toLocaleString()}`, 'Amount']}
+            />
+          </PieChart>
         </ResponsiveContainer>
+        
+        {/* Center label */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          <span className="text-[10px] font-mono text-text-secondary dark:text-gray-500 uppercase tracking-widest">Total</span>
+          <span className="text-lg font-bold text-text-primary dark:text-white">
+            {currencySymbol}{data.reduce((sum, d) => sum + Number(d.value), 0).toLocaleString()}
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-6 grid grid-cols-2 gap-2">
+        {data.slice(0, 4).map((d, i) => (
+          <div key={d.name} className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+            <span className="text-[10px] font-mono text-text-secondary dark:text-gray-400 uppercase tracking-widest truncate">{d.name}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };

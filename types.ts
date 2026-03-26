@@ -1,4 +1,13 @@
 
+export interface User {
+    uid: string;
+    email: string | null;
+}
+
+export interface UserPreferences {
+    isDarkMode: boolean;
+    currency: Currency;
+}
 
 export enum TransactionType {
   INCOME = 'Income',
@@ -15,6 +24,9 @@ export enum Category {
   SALARY = 'Salary',
   FREELANCE = 'Freelance',
   INVESTMENTS = 'Investments',
+  RENT = 'Rent',
+  BILLS = 'Bills',
+  EDUCATION = 'Education',
   OTHER = 'Other',
 }
 
@@ -25,6 +37,59 @@ export interface Transaction {
   type: TransactionType;
   category: Category;
   date: string; // ISO string format: YYYY-MM-DD
+  notes?: string;
+  receiptUrl?: string;
+  isRecurring?: boolean;
+  recurringFrequency?: 'daily' | 'weekly' | 'monthly';
+  isSplit?: boolean;
+  splitCount?: number;
+  splitWith?: string[]; // Array of user IDs or names
+}
+
+export interface Budget {
+  id: string;
+  category: Category;
+  amount: number;
+  period: 'monthly';
+}
+
+export interface Goal {
+  id: string;
+  name: string;
+  targetAmount: number;
+  currentAmount: number;
+  targetDate: string;
+  category?: Category;
+}
+
+export interface Bill {
+  id: string;
+  name: string;
+  amount: number;
+  dueDate: string;
+  isPaid: boolean;
+  category: Category;
+}
+
+export interface PortfolioAsset {
+  id: string;
+  symbol: string;
+  name: string;
+  quantity: number;
+  averagePrice: number;
+  currentPrice: number;
+  type: 'stock' | 'crypto' | 'mutual_fund';
+}
+
+export interface FinancialHealthScore {
+  score: number;
+  breakdown: {
+    savings: number;
+    spending: number;
+    investments: number;
+    debt: number;
+  };
+  suggestions: string[];
 }
 
 export interface ChatMessage {
@@ -32,11 +97,24 @@ export interface ChatMessage {
     text: string;
 }
 
-export type Currency = 'USD' | 'INR';
+export enum Currency {
+  USD = 'USD',
+  EUR = 'EUR',
+  GBP = 'GBP',
+  INR = 'INR',
+  JPY = 'JPY',
+  CAD = 'CAD',
+  AUD = 'AUD',
+}
 
 export const CURRENCY_SYMBOLS: Record<Currency, string> = {
-  USD: '$',
-  INR: '₹',
+  [Currency.USD]: '$',
+  [Currency.EUR]: '€',
+  [Currency.GBP]: '£',
+  [Currency.INR]: '₹',
+  [Currency.JPY]: '¥',
+  [Currency.CAD]: 'C$',
+  [Currency.AUD]: 'A$',
 };
 
 // FIX: Make properties optional to match the Gemini API response structure.

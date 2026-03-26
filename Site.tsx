@@ -1,23 +1,27 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
+import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import LandingPage from './components/LandingPage';
+import { User } from './types';
+
+// A mock user for guest access. All data will be stored under this user's ID in Firestore.
+const guestUser: User = {
+  uid: 'guest_user_001', // A unique ID for the guest user
+  email: 'guest@finsight.ai',
+};
 
 const Site: React.FC = () => {
-  const [isAppVisible, setIsAppVisible] = useState(false);
+  const [showApp, setShowApp] = useState(false);
 
-  const handleLogin = useCallback(() => {
-    setIsAppVisible(true);
-  }, []);
-
-  const handleLogout = useCallback(() => {
-    setIsAppVisible(false);
-  }, []);
-
-  if (isAppVisible) {
-    return <App onLogout={handleLogout} />;
+  if (showApp) {
+    return (
+      <BrowserRouter>
+        <App user={guestUser} />
+      </BrowserRouter>
+    );
   }
-
-  return <LandingPage onLogin={handleLogin} />;
+  
+  return <LandingPage onLaunchApp={() => setShowApp(true)} />;
 };
 
 export default Site;

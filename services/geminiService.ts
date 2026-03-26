@@ -1,138 +1,104 @@
-import { GoogleGenAI, Chat, GenerateContentResponse } from "@google/genai";
-import { Transaction, GroundingChunk } from '../types';
+import { GoogleGenAI } from "@google/genai";
+import { Transaction, Category } from "../types";
 
-/**
- * Gets the AI client on-demand.
- * This function is called before every AI-related request. It relies on the API key
- * being set as an environment variable (`process.env.API_KEY`).
- * @returns An instance of GoogleGenAI
- * @throws An error if the API_KEY environment variable is not set.
- */
-const getAiClient = (): GoogleGenAI => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    throw new Error("API Key not configured. Please create a .env file and add your API_KEY to it.");
-  }
-  return new GoogleGenAI({ apiKey });
-};
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
-export const getFinancialNews = async (): Promise<{ summary: string; sources: GroundingChunk[] }> => {
-  const ai = getAiClient();
-  
-  const prompt = "What are the top 5 latest financial news headlines? Provide a brief summary of each.";
+export const geminiService = {
+  // Auto-categorize a transaction description
+  categorizeTransaction: async (description: string): Promise<Category> => {
+    const model = "gemini-3-flash-preview";
+    const prompt = `Categorize this financial transaction description into one of these categories: ${Object.values(Category).join(", ")}. 
+    Description: "${description}"
+    Return only the category name.`;
 
-  const response: GenerateContentResponse = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: prompt,
-    config: {
-      tools: [{ googleSearch: {} }],
-    },
-  });
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+      });
+      const category = response.text.trim() as Category;
+      return Object.values(Category).includes(category) ? category : Category.OTHER;
+    } catch (error) {
+      console.error("AI Categorization failed:", error);
+      return Category.OTHER;
+    }
+  },
 
-  const summary = response.text;
-  const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+  // Generate spending insights and suggestions
+  getFinancialInsights: async (transactions: Transaction[], budgets: any[]): Promise<string[]> => {
+    const model = "gemini-3-flash-preview";
+    const summary = transactions.slice(0, 20).map(t => `${t.date}: ${t.description} - ${t.amount} (${t.category})`).join("\n");
+    const prompt = `Analyze these recent transactions and provide 3 actionable financial tips or observations. 
+    Keep them short, professional, and encouraging.
+    Transactions:
+    ${summary}
+    Return as a JSON array of strings.`;
 
-  return { summary, sources };
-};
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: { responseMimeType: "application/json" }
+      });
+      return JSON.parse(response.text);
+    } catch (error) {
+      console.error("AI Insights failed:", error);
+      return ["Keep tracking your expenses to get personalized insights.", "Consider setting up a budget for better control.", "You're doing great! Keep it up."];
+    }
+  },
 
-export const generateFinancialSummary = async (transactions: Transaction[]): Promise<string> => {
-  const ai = getAiClient();
-  
-  const prompt = `
-      Analyze the following financial transactions and provide a concise, insightful summary.
-      - Highlight the biggest spending categories.
-      - Mention the total income vs. total expenses.
-      - Offer one smart suggestion for saving money based on the spending patterns.
-      - Keep the tone encouraging and helpful.
-      - Format the output as markdown.
+  // Chatbot response
+  getChatResponse: async (message: string, context: { transactions: Transaction[], balance: number }): Promise<string> => {
+    const model = "gemini-3-flash-preview";
+    const prompt = `You are FinSight AI, a professional financial assistant. 
+    User Question: "${message}"
+    User Context: Current Balance: ${context.balance}, Recent Transactions: ${context.transactions.slice(0, 5).map(t => t.description).join(", ")}
+    Provide a helpful, concise response.`;
 
-      Transactions:
-      ${JSON.stringify(transactions.slice(0, 50), null, 2)}
-    `;
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+      });
+      return response.text;
+    } catch (error) {
+      console.error("AI Chat failed:", error);
+      return "I'm sorry, I'm having trouble connecting right now. Please try again later.";
+    }
+  },
 
-  const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt
-  });
-  
-  return response.text;
-};
-
-export const generateContentAnalysis = async (content: string): Promise<string> => {
-    const ai = getAiClient();
-    if (!content.trim()) return "Please provide some content to analyze.";
-
-    const prompt = `
-      Analyze the following text and provide a concise, insightful summary in markdown format.
-      - Identify the main topics or arguments.
-      - Determine the overall sentiment (e.g., positive, negative, neutral).
-      - Extract any key takeaways or conclusions.
-  
-      Content to analyze:
-      ---
-      ${content}
-      ---
-    `;
-  
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt
-    });
+  // Predict future expenses
+  getExpenseForecast: async (transactions: Transaction[]): Promise<{ nextWeek: number, nextMonth: number, reasoning: string }> => {
+    const model = "gemini-3-flash-preview";
+    const expenses = transactions.filter(t => t.type === 'Expense');
+    const summary = expenses.slice(0, 50).map(t => `${t.date}: ${t.amount} (${t.category})`).join("\n");
     
-    return response.text;
-  };
+    const prompt = `Based on the following historical expense data, predict the total expenses for the next 7 days (next week) and the next 30 days (next month).
+    Provide a brief reasoning for your prediction based on spending patterns, recurring costs, or anomalies.
+    
+    Historical Expenses:
+    ${summary}
+    
+    Return the response in JSON format with these keys: "nextWeek" (number), "nextMonth" (number), "reasoning" (string).`;
 
-
-export const startChat = (transactions: Transaction[]): Chat => {
-    const ai = getAiClient();
-
-    const history = [
-        {
-            role: "user",
-            parts: [{text: `You are a friendly and knowledgeable financial assistant for an expense tracker app. Your goal is to help users understand their finances and make better decisions. You have access to their recent transactions.
-
-            Here are the user's transactions:
-            ${JSON.stringify(transactions.slice(0, 50), null, 2)}
-            
-            Based on this data, answer user's questions. Be concise, helpful, and never give professional financial advice, but rather suggestions based on their provided data. Start the conversation by greeting the user and asking how you can help with their finances today.`}],
-        },
-        {
-            role: "model",
-            parts: [{text: "Hello! I'm your personal finance assistant. I can see your latest transactions. How can I help you analyze your spending or find savings opportunities today?"}]
-        }
-    ];
-
-    const chat = ai.chats.create({
-        model: 'gemini-2.5-flash',
-        history: history,
-    });
-    return chat;
-};
-
-export const startNewsChat = (newsSummary: string): Chat => {
-    const ai = getAiClient();
-
-    const history = [
-        {
-            role: "user",
-            parts: [{text: `You are a helpful assistant. Your task is to answer questions based *only* on the provided financial news summary. Do not use any external knowledge. If the answer cannot be found in the summary, clearly state that the provided text does not contain the answer.
-
-            Here is the news summary you must use:
-            ---
-            ${newsSummary}
-            ---
-            
-            Now, please wait for the user's question.`}],
-        },
-        {
-            role: "model",
-            parts: [{text: "I have read the news summary. What would you like to know?"}]
-        }
-    ];
-
-    const chat = ai.chats.create({
-        model: 'gemini-2.5-flash',
-        history: history,
-    });
-    return chat;
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: { responseMimeType: "application/json" }
+      });
+      return JSON.parse(response.text);
+    } catch (error) {
+      console.error("AI Forecast failed:", error);
+      // Fallback calculation
+      const avgDaily = expenses.length > 0 
+        ? expenses.reduce((sum, t) => sum + t.amount, 0) / (expenses.length * 30) // Very rough estimate
+        : 0;
+      return {
+        nextWeek: avgDaily * 7,
+        nextMonth: avgDaily * 30,
+        reasoning: "Based on your average daily spending patterns."
+      };
+    }
+  }
 };

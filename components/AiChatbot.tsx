@@ -1,242 +1,144 @@
-
-
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Transaction, ChatMessage } from '../types';
-import { startChat } from '../services/geminiService';
-import { Chat } from '@google/genai';
-import { PaperAirplaneIcon, XMarkIcon, ChatBubbleOvalLeftEllipsisIcon, SparklesIcon, MicrophoneIcon } from './icons';
-
-interface SpeechRecognition extends EventTarget {
-  continuous: boolean;
-  lang: string;
-  interimResults: boolean;
-  maxAlternatives: number;
-  start: () => void;
-  stop: () => void;
-  onstart: () => void;
-  onresult: (event: any) => void;
-  onerror: (event: any) => void;
-  onend: () => void;
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition: { new(): SpeechRecognition };
-    webkitSpeechRecognition: { new(): SpeechRecognition };
-  }
-}
+import React, { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { geminiService } from '../services/geminiService';
+import { Transaction, Currency, CURRENCY_SYMBOLS } from '../types';
+import { SparklesIcon, XMarkIcon, PaperAirplaneIcon, UserIcon, BotIcon } from './icons';
 
 interface AiChatbotProps {
   transactions: Transaction[];
+  currency: Currency;
+  balance: number;
 }
 
-const AiChatbot: React.FC<AiChatbotProps> = ({ transactions }) => {
+const AiChatbot: React.FC<AiChatbotProps> = ({ transactions, currency, balance }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<{ role: 'user' | 'bot'; text: string }[]>([
+    { role: 'bot', text: 'Hello! I am FinSight AI. How can I help you with your finances today?' }
+  ]);
   const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
-  const chatRef = useRef<Chat | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const [micStatus, setMicStatus] = useState<'idle' | 'listening'>('idle');
-  const [isSpeechRecognitionSupported, setIsSpeechRecognitionSupported] = useState(false);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
-
-  const initializeChat = useCallback(() => {
-    const chat = startChat(transactions);
-    chatRef.current = chat;
-    setMessages([{
-        role: 'model',
-        text: "Hello! I'm your personal finance assistant. How can I help you analyze your spending or find savings opportunities today?"
-    }]);
-    setIsInitialized(true);
-  }, [transactions]);
+  const [isTyping, setIsTyping] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (isOpen && !isInitialized) {
-      try {
-        initializeChat();
-      } catch (e) {
-        const errorMessage = e instanceof Error ? e.message : "An unknown error occurred.";
-        setMessages([{
-            role: 'model',
-            text: `Chat failed to start: ${errorMessage}`
-        }]);
-        setIsInitialized(false);
-      }
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [isOpen, isInitialized, initializeChat]);
+  }, [messages]);
 
-  useEffect(() => {
-    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-    setIsSpeechRecognitionSupported(!!SpeechRecognitionAPI);
-  }, []);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(scrollToBottom, [messages]);
-
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || isLoading || !chatRef.current) return;
-
-    const userMessage: ChatMessage = { role: 'user', text: input };
-    setMessages(prev => [...prev, userMessage]);
+  const handleSend = async () => {
+    if (!input.trim()) return;
+    const userMsg = input;
     setInput('');
-    setIsLoading(true);
+    setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    setIsTyping(true);
 
     try {
-        const result = await chatRef.current.sendMessageStream({ message: input });
-        let modelResponse = '';
-        setMessages(prev => [...prev, { role: 'model', text: '' }]);
-
-        for await (const chunk of result) {
-            modelResponse += chunk.text;
-            setMessages(prev => {
-                const newMessages = [...prev];
-                newMessages[newMessages.length - 1].text = modelResponse;
-                return newMessages;
-            });
-        }
+      const response = await geminiService.getChatResponse(userMsg, { transactions, balance });
+      setMessages(prev => [...prev, { role: 'bot', text: response }]);
     } catch (error) {
-      console.error("Chat error:", error);
-      const errorMessageText = error instanceof Error ? error.message : "Sorry, I'm having trouble connecting. Please try again later.";
-      const errorMessage: ChatMessage = { role: 'model', text: errorMessageText };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages(prev => [...prev, { role: 'bot', text: "I'm sorry, I'm having trouble connecting right now." }]);
     } finally {
-      setIsLoading(false);
+      setIsTyping(false);
     }
   };
-  
-  const handleToggleListening = () => {
-    if (micStatus === 'listening') {
-      recognitionRef.current?.stop();
-      return;
-    }
-
-    if (!isSpeechRecognitionSupported) return;
-
-    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognition = new SpeechRecognitionAPI();
-    recognitionRef.current = recognition;
-
-    recognition.lang = 'en-US';
-    recognition.interimResults = false;
-    recognition.continuous = false;
-
-    recognition.onstart = () => {
-      setMicStatus('listening');
-    };
-
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      setInput(prev => prev ? `${prev} ${transcript}`: transcript);
-    };
-
-    recognition.onerror = (event) => {
-      console.error('Speech recognition error:', event.error);
-    };
-    
-    recognition.onend = () => {
-      setMicStatus('idle');
-      recognitionRef.current = null;
-    };
-    
-    try {
-        recognition.start();
-    } catch (e) {
-        console.error("Failed to start speech recognition:", e);
-        setMicStatus('idle');
-        recognitionRef.current = null;
-    }
-  };
-
 
   return (
-    <>
-      <div className={`fixed bottom-0 right-0 m-6 transition-transform duration-300 ${isOpen ? 'translate-x-full' : 'translate-x-0'}`}>
-        <button
-          onClick={() => setIsOpen(true)}
-          className="bg-primary text-white rounded-full p-4 shadow-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
-          aria-label="Open AI Chatbot"
-        >
-          <ChatBubbleOvalLeftEllipsisIcon className="h-8 w-8" />
-        </button>
-      </div>
+    <div className="fixed bottom-8 right-8 z-50">
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            className="absolute bottom-20 right-0 w-[400px] h-[600px] bg-white dark:bg-gray-800 rounded-[2.5rem] shadow-2xl border border-gray-100 dark:border-gray-700 flex flex-col overflow-hidden"
+          >
+            {/* Header */}
+            <div className="p-6 bg-indigo-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                  <SparklesIcon className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold">FinSight AI</h3>
+                  <p className="text-[10px] font-mono uppercase tracking-widest opacity-70">Always Online</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsOpen(false)}
+                className="p-2 hover:bg-white/10 rounded-full transition-colors"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
 
-      <div className={`fixed bottom-0 right-0 z-50 w-full h-full sm:h-auto sm:max-w-md sm:max-h-[70vh] flex flex-col bg-card dark:bg-gray-800 shadow-2xl rounded-t-lg sm:rounded-lg sm:m-6 transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-          <div className="flex items-center">
-            <SparklesIcon className="h-6 w-6 text-primary dark:text-primary-dark mr-2" />
-            <h3 className="text-lg font-semibold text-text-primary dark:text-white">Financial Assistant</h3>
-          </div>
-          <button onClick={() => setIsOpen(false)} className="text-gray-500 hover:text-gray-800 dark:hover:text-white">
-            <XMarkIcon className="h-6 w-6" />
-          </button>
-        </div>
+            {/* Messages */}
+            <div 
+              ref={scrollRef}
+              className="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar"
+            >
+              {messages.map((m, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div className={`flex gap-3 max-w-[80%] ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${m.role === 'user' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}>
+                      {m.role === 'user' ? <UserIcon className="w-5 h-5" /> : <BotIcon className="w-5 h-5" />}
+                    </div>
+                    <div className={`p-4 rounded-2xl text-sm ${m.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-gray-50 dark:bg-gray-900/50 text-text-primary dark:text-white rounded-tl-none'}`}>
+                      {m.text}
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+              {isTyping && (
+                <div className="flex justify-start">
+                  <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl rounded-tl-none">
+                    <div className="flex gap-1">
+                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" />
+                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0.2s]" />
+                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0.4s]" />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
-        {/* Messages */}
-        <div className="flex-1 p-4 overflow-y-auto space-y-4">
-          {messages.map((msg, index) => (
-            <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-xs md:max-w-sm px-4 py-2 rounded-lg ${msg.role === 'user' ? 'bg-primary text-white rounded-br-none' : 'bg-gray-200 dark:bg-gray-700 text-text-primary dark:text-white rounded-bl-none'}`}>
-                <p className="text-sm" dangerouslySetInnerHTML={{ __html: msg.text.replace(/\n/g, '<br />')}} />
+            {/* Input */}
+            <div className="p-6 border-t border-gray-100 dark:border-gray-700">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Ask me anything..."
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                  className="w-full pl-6 pr-14 py-4 bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all dark:text-white"
+                />
+                <button
+                  onClick={handleSend}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/20"
+                >
+                  <PaperAirplaneIcon className="w-5 h-5" />
+                </button>
               </div>
             </div>
-          ))}
-          {isLoading && messages[messages.length-1].role === 'user' && (
-            <div className="flex justify-start">
-               <div className="max-w-xs md:max-w-sm px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-text-primary dark:text-white rounded-bl-none">
-                <div className="flex items-center space-x-1">
-                    <span className="h-2 w-2 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                    <span className="h-2 w-2 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                    <span className="h-2 w-2 bg-gray-500 rounded-full animate-bounce"></span>
-                </div>
-               </div>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-        {/* Input */}
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
-          <form onSubmit={handleSendMessage} className="flex items-center">
-            <div className="relative w-full">
-                <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask about your finances..."
-                className="w-full pl-4 pr-12 py-2 border border-gray-300 dark:border-gray-600 rounded-l-full bg-transparent focus:outline-none focus:ring-2 focus:ring-primary disabled:cursor-not-allowed"
-                disabled={isLoading || !isInitialized}
-                />
-                {isSpeechRecognitionSupported && (
-                    <button
-                        type="button"
-                        onClick={handleToggleListening}
-                        disabled={!isInitialized || isLoading}
-                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-primary disabled:text-gray-300"
-                        aria-label={micStatus === 'listening' ? 'Stop listening' : 'Start listening'}
-                    >
-                        <MicrophoneIcon className={`h-5 w-5 ${micStatus === 'listening' ? 'text-red-500 animate-pulse' : ''}`} />
-                    </button>
-                )}
-            </div>
-            <button
-              type="submit"
-              disabled={isLoading || !input.trim() || !isInitialized}
-              className="bg-primary text-white px-4 py-2 rounded-r-full hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed h-[42px]"
-            >
-              <PaperAirplaneIcon className="h-5 w-5" />
-            </button>
-          </form>
-        </div>
-      </div>
-    </>
+      <motion.button
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.9 }}
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-16 h-16 bg-indigo-600 text-white rounded-[1.5rem] shadow-2xl shadow-indigo-500/40 flex items-center justify-center relative group"
+      >
+        <SparklesIcon className="w-8 h-8 group-hover:rotate-12 transition-transform" />
+        <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white dark:border-gray-900" />
+      </motion.button>
+    </div>
   );
 };
 

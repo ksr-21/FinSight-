@@ -1,215 +1,215 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Transaction, TransactionType, Category } from '../types';
-import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../constants';
-import { XMarkIcon, MicrophoneIcon } from './icons';
-
-interface SpeechRecognition extends EventTarget {
-  continuous: boolean;
-  lang: string;
-  interimResults: boolean;
-  maxAlternatives: number;
-  start: () => void;
-  stop: () => void;
-  onstart: () => void;
-  onresult: (event: any) => void;
-  onerror: (event: any) => void;
-  onend: () => void;
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition: { new(): SpeechRecognition };
-    webkitSpeechRecognition: { new(): SpeechRecognition };
-  }
-}
-
+import React, { useState, useEffect } from 'react';
+import { Transaction, TransactionType, Category, Currency, CURRENCY_SYMBOLS } from '../types';
+import { geminiService } from '../services/geminiService';
+import { SparklesIcon } from './icons';
 
 interface TransactionFormProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onAdd: (transaction: Omit<Transaction, 'id'>) => void;
-  onEdit: (transaction: Transaction) => void;
-  transactionToEdit: Transaction | null;
+  onSubmit: (t: Omit<Transaction, 'id'>) => void;
+  currency: Currency;
+  initialData?: Transaction | null;
 }
 
-type MicStatus = 'idle' | 'starting' | 'listening';
-
-const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onAdd, onEdit, transactionToEdit }) => {
+const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, currency, initialData }) => {
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [type, setType] = useState<TransactionType>(TransactionType.EXPENSE);
   const [category, setCategory] = useState<Category>(Category.FOOD);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  
-  const [micStatus, setMicStatus] = useState<MicStatus>('idle');
-  const [isSpeechRecognitionSupported, setIsSpeechRecognitionSupported] = useState(false);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const [notes, setNotes] = useState('');
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurringInterval, setRecurringInterval] = useState<'daily' | 'weekly' | 'monthly'>('monthly');
+  const [isSplit, setIsSplit] = useState(false);
+  const [splitCount, setSplitCount] = useState('2');
+  const [isAiCategorizing, setIsAiCategorizing] = useState(false);
 
   useEffect(() => {
-    if (transactionToEdit) {
-      setDescription(transactionToEdit.description);
-      setAmount(String(transactionToEdit.amount));
-      setType(transactionToEdit.type);
-      setCategory(transactionToEdit.category);
-      setDate(transactionToEdit.date);
-    } else {
-      // Reset form
-      setDescription('');
-      setAmount('');
-      setType(TransactionType.EXPENSE);
-      setCategory(Category.FOOD);
-      setDate(new Date().toISOString().split('T')[0]);
+    if (initialData) {
+      setDescription(initialData.description);
+      setAmount(String(initialData.amount));
+      setType(initialData.type);
+      setCategory(initialData.category);
+      setDate(initialData.date);
+      setNotes(initialData.notes || '');
+      setIsRecurring(!!initialData.isRecurring);
+      setRecurringInterval(initialData.recurringInterval || 'monthly');
     }
-  }, [transactionToEdit, isOpen]);
-  
-  useEffect(() => {
-    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-    setIsSpeechRecognitionSupported(!!SpeechRecognitionAPI);
-    if (!SpeechRecognitionAPI) {
-      console.warn('Speech Recognition not supported in this browser.');
-    }
-  }, []);
-
-
-  useEffect(() => {
-    // Update category list when type changes
-    if (type === TransactionType.INCOME) {
-      setCategory(INCOME_CATEGORIES[0]);
-    } else {
-      setCategory(EXPENSE_CATEGORIES[0]);
-    }
-  }, [type]);
-  
-  const handleToggleListening = () => {
-    if (micStatus === 'listening') {
-      recognitionRef.current?.stop();
-      // onend will handle state transition
-      return;
-    }
-
-    if (micStatus === 'starting' || !isSpeechRecognitionSupported) {
-      return; // Do nothing if already starting or not supported
-    }
-
-    setMicStatus('starting');
-    
-    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognition = new SpeechRecognitionAPI();
-    recognitionRef.current = recognition;
-
-    recognition.lang = 'en-US';
-    recognition.interimResults = false;
-    recognition.continuous = false;
-
-    recognition.onstart = () => {
-      setMicStatus('listening');
-    };
-
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      setDescription(transcript);
-    };
-
-    recognition.onerror = (event) => {
-      console.error('Speech recognition error:', event.error);
-      // The onend event will fire after an error, cleaning up the state.
-    };
-    
-    recognition.onend = () => {
-      setMicStatus('idle');
-      recognitionRef.current = null;
-    };
-    
-    try {
-        recognition.start();
-    } catch (e) {
-        console.error("Failed to start speech recognition:", e);
-        setMicStatus('idle');
-        recognitionRef.current = null;
-    }
-  };
+  }, [initialData]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const transactionData = {
+    if (!description || !amount) return;
+    onSubmit({
       description,
       amount: parseFloat(amount),
       type,
       category,
       date,
-    };
-    if (transactionToEdit) {
-      onEdit({ ...transactionData, id: transactionToEdit.id });
-    } else {
-      onAdd(transactionData);
+      notes,
+      isRecurring,
+      recurringFrequency: isRecurring ? recurringInterval : undefined,
+      isSplit,
+      splitCount: isSplit ? parseInt(splitCount) : undefined
+    });
+  };
+
+  const handleAiCategorize = async () => {
+    if (!description.trim()) return;
+    setIsAiCategorizing(true);
+    try {
+      const suggestedCategory = await geminiService.categorizeTransaction(description);
+      setCategory(suggestedCategory);
+    } catch (error) {
+      console.error("AI categorization failed", error);
+    } finally {
+      setIsAiCategorizing(false);
     }
   };
 
-  if (!isOpen) return null;
-
-  const categoryOptions = type === TransactionType.INCOME ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
-  const isMicActive = micStatus === 'listening' || micStatus === 'starting';
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-      <div className="bg-card dark:bg-gray-800 rounded-lg p-8 w-full max-w-md m-4">
-        <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-text-primary dark:text-white">{transactionToEdit ? 'Edit' : 'Add'} Transaction</h2>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
-                <XMarkIcon className="h-6 w-6"/>
-            </button>
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-2">
+          <div className="flex justify-between items-center">
+            <label className="text-xs font-mono text-text-secondary dark:text-gray-400 uppercase tracking-widest ml-1">Description</label>
+            {description.length > 3 && (
+              <button
+                type="button"
+                onClick={handleAiCategorize}
+                disabled={isAiCategorizing}
+                className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 hover:opacity-80 transition-opacity disabled:opacity-50"
+              >
+                <SparklesIcon className={`w-3 h-3 ${isAiCategorizing ? 'animate-spin' : ''}`} />
+                {isAiCategorizing ? 'Categorizing...' : 'AI Categorize'}
+              </button>
+            )}
+          </div>
+          <input
+            type="text"
+            placeholder="e.g. Grocery Shopping"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="w-full px-5 py-4 bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all dark:text-white"
+            required
+          />
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-text-secondary dark:text-gray-300">Description</label>
-            <div className="relative mt-1">
-              <input type="text" value={description} onChange={e => setDescription(e.target.value)} required 
-                     className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary bg-transparent pr-10" />
-              {isSpeechRecognitionSupported && (
-                <button
-                  type="button"
-                  onClick={handleToggleListening}
-                  disabled={micStatus === 'starting'}
-                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-primary disabled:text-gray-300 disabled:cursor-wait"
-                  aria-label={isMicActive ? 'Stop listening' : 'Start listening'}
-                >
-                  <MicrophoneIcon className={`h-5 w-5 ${isMicActive ? 'text-red-500 animate-pulse' : ''}`} />
-                </button>
-              )}
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-secondary dark:text-gray-300">Amount</label>
-            <input type="number" value={amount} onChange={e => setAmount(e.target.value)} required min="0.01" step="0.01"
-                   className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary bg-transparent" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-secondary dark:text-gray-300">Type</label>
-            <select value={type} onChange={e => setType(e.target.value as TransactionType)}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary bg-card dark:bg-gray-700">
-              <option value={TransactionType.EXPENSE}>Expense</option>
-              <option value={TransactionType.INCOME}>Income</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-secondary dark:text-gray-300">Category</label>
-            <select value={category} onChange={e => setCategory(e.target.value as Category)}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary bg-card dark:bg-gray-700">
-              {categoryOptions.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text-secondary dark:text-gray-300">Date</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} required
-                   className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary bg-card dark:bg-gray-700" />
-          </div>
-          <div className="flex justify-end gap-4 pt-4">
-            <button type="button" onClick={onClose} className="px-4 py-2 border border-gray-300 dark:border-gray-500 rounded-md text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-700">Cancel</button>
-            <button type="submit" className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-md hover:bg-indigo-700">{transactionToEdit ? 'Save Changes' : 'Add Transaction'}</button>
-          </div>
-        </form>
+        <div className="space-y-2">
+          <label className="text-xs font-mono text-text-secondary dark:text-gray-400 uppercase tracking-widest ml-1">Amount ({CURRENCY_SYMBOLS[currency]})</label>
+          <input
+            type="number"
+            placeholder="0.00"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="w-full px-5 py-4 bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all dark:text-white font-mono"
+            required
+          />
+        </div>
       </div>
-    </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="space-y-2">
+          <label className="text-xs font-mono text-text-secondary dark:text-gray-400 uppercase tracking-widest ml-1">Type</label>
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value as TransactionType)}
+            className="w-full px-5 py-4 bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all dark:text-white"
+          >
+            <option value={TransactionType.INCOME}>Income</option>
+            <option value={TransactionType.EXPENSE}>Expense</option>
+          </select>
+        </div>
+        <div className="space-y-2">
+          <label className="text-xs font-mono text-text-secondary dark:text-gray-400 uppercase tracking-widest ml-1">Category</label>
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value as Category)}
+            className="w-full px-5 py-4 bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all dark:text-white"
+          >
+            {Object.values(Category).map((cat) => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <label className="text-xs font-mono text-text-secondary dark:text-gray-400 uppercase tracking-widest ml-1">Date</label>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="w-full px-5 py-4 bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all dark:text-white font-mono"
+            required
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-xs font-mono text-text-secondary dark:text-gray-400 uppercase tracking-widest ml-1">Notes (Optional)</label>
+        <textarea
+          placeholder="Add any additional details..."
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          className="w-full px-5 py-4 bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all dark:text-white resize-none h-24"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between p-6 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-700 gap-4">
+          <div className="flex items-center gap-3">
+            <input 
+              type="checkbox" 
+              id="recurring"
+              checked={isRecurring}
+              onChange={(e) => setIsRecurring(e.target.checked)}
+              className="w-5 h-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            <label htmlFor="recurring" className="text-sm font-bold text-text-primary dark:text-white cursor-pointer">Recurring</label>
+          </div>
+          {isRecurring && (
+            <select
+              value={recurringInterval}
+              onChange={(e) => setRecurringInterval(e.target.value as any)}
+              className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all dark:text-white text-sm"
+            >
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          )}
+        </div>
+
+        <div className="flex flex-col md:flex-row md:items-center justify-between p-6 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-700 gap-4">
+          <div className="flex items-center gap-3">
+            <input 
+              type="checkbox" 
+              id="split"
+              checked={isSplit}
+              onChange={(e) => setIsSplit(e.target.checked)}
+              className="w-5 h-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            <label htmlFor="split" className="text-sm font-bold text-text-primary dark:text-white cursor-pointer">Split Expense</label>
+          </div>
+          {isSplit && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono text-text-secondary dark:text-gray-400 uppercase tracking-widest">Between</span>
+              <input 
+                type="number"
+                min="2"
+                value={splitCount}
+                onChange={(e) => setSplitCount(e.target.value)}
+                className="w-16 px-3 py-1 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition-all dark:text-white text-sm font-mono"
+              />
+              <span className="text-xs font-mono text-text-secondary dark:text-gray-400 uppercase tracking-widest">People</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <button
+        type="submit"
+        className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-bold text-lg hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-500/20 active:scale-[0.98]"
+      >
+        {initialData ? 'Update Transaction' : 'Save Transaction'}
+      </button>
+    </form>
   );
 };
 

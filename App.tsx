@@ -1,71 +1,117 @@
-import React, { useState, useEffect } from 'react';
-import { Transaction, TransactionType, Category, Currency } from './types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { Transaction, Currency, User } from './types';
 import Header from './components/Header';
-import Dashboard from './components/Dashboard';
-import TransactionList from './components/TransactionList';
 import TransactionForm from './components/TransactionForm';
+import { 
+  getTransactionsForUser, 
+  addTransactionForUser, 
+  updateTransactionForUser, 
+  deleteTransactionForUser, 
+  getUserPreferences, 
+  saveUserPreferences 
+} from './services/mockApiService';
+import { RefreshIcon } from './components/icons';
+
+// Import Pages
+import DashboardPage from './pages/DashboardPage';
+import TransactionsPage from './pages/TransactionsPage';
+import WealthHorizonPage from './pages/WealthHorizonPage';
+import BudgetsGoalsPage from './pages/BudgetsGoalsPage';
+import NewsPage from './pages/NewsPage';
+import InsightsPage from './pages/InsightsPage';
 import AiChatbot from './components/AiChatbot';
-import AiContentAnalyzer from './components/AiContentAnalyzer';
-import News from './components/News';
 
 interface AppProps {
-  onLogout: () => void;
+  user: User;
 }
 
-const App: React.FC<AppProps> = ({ onLogout }) => {
+const App: React.FC<AppProps> = ({ user }) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    return localStorage.getItem('darkMode') === 'true';
-  });
-  const [currency, setCurrency] = useState<Currency>(() => {
-    return (localStorage.getItem('currency') as Currency) || 'USD';
-  });
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
+  const [currency, setCurrency] = useState<Currency>('USD');
+  
+  const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Save transactions to localStorage whenever they change
-  useEffect(() => {
+  const balance = transactions.reduce((acc, t) => acc + (t.type === 'income' ? t.amount : -t.amount), 0);
+
+  const fetchTransactions = useCallback(async () => {
+    if (!user) return;
     try {
-      localStorage.setItem('transactions', JSON.stringify(transactions));
-    } catch (error) {
-      console.error("Could not save transactions to localStorage", error);
+      const trans = await getTransactionsForUser(user.uid);
+      setTransactions(trans.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    } catch (e) {
+      console.error("Failed to fetch transactions", e);
+      setError("Could not load your transactions. Please try refreshing.");
     }
-  }, [transactions]);
+  }, [user]);
 
-  // Save dark mode preference to localStorage
+  // Effect to load all user data on initial mount
+  useEffect(() => {
+    const loadData = async () => {
+      if (!user) return;
+
+      try {
+        setIsLoadingData(true);
+        setError(null);
+        
+        // Fetch preferences and transactions in parallel
+        const [prefs, trans] = await Promise.all([
+          getUserPreferences(user.uid),
+          getTransactionsForUser(user.uid)
+        ]);
+        
+        setIsDarkMode(prefs.isDarkMode);
+        setCurrency(prefs.currency);
+        setTransactions(trans.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+
+      } catch (e) {
+        console.error("Failed to load user data", e);
+        setError("Could not load your data. Please try refreshing the page.");
+      } finally {
+        setIsLoadingData(false);
+      }
+    };
+
+    loadData();
+  }, [user]);
+
+
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
-      localStorage.setItem('darkMode', 'true');
     } else {
       document.documentElement.classList.remove('dark');
-      localStorage.setItem('darkMode', 'false');
     }
-  }, [isDarkMode]);
-  
-  // Save currency preference to localStorage
-  useEffect(() => {
-    localStorage.setItem('currency', currency);
-  }, [currency]);
+
+    if (!isLoadingData && user) {
+        saveUserPreferences(user.uid, { isDarkMode, currency });
+    }
+  }, [isDarkMode, currency, user, isLoadingData]);
 
 
-  const handleAddTransaction = (transaction: Omit<Transaction, 'id'>) => {
-    const newTransaction: Transaction = {
-      ...transaction,
-      id: Date.now().toString(),
-    };
-    setTransactions(prev => [newTransaction, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+  const handleAddTransaction = async (transaction: Omit<Transaction, 'id'>) => {
+    if (!user) return;
+    await addTransactionForUser(user.uid, transaction);
+    await fetchTransactions(); // Refetch to get the new transaction with its ID
     setIsFormModalOpen(false);
   };
 
-  const handleEditTransaction = (transaction: Transaction) => {
-    setTransactions(prev => prev.map(t => t.id === transaction.id ? transaction : t));
+  const handleEditTransaction = async (transaction: Transaction) => {
+    if (!user) return;
+    await updateTransactionForUser(user.uid, transaction);
+    await fetchTransactions(); // Refetch
     setEditingTransaction(null);
     setIsFormModalOpen(false);
   };
 
-  const handleDeleteTransaction = (id: string) => {
-    setTransactions(prev => prev.filter(t => t.id !== id));
+  const handleDeleteTransaction = async (id: string) => {
+    if (!user) return;
+    await deleteTransactionForUser(user.uid, id);
+    await fetchTransactions(); // Refetch
   };
 
   const openAddModal = () => {
@@ -79,48 +125,54 @@ const App: React.FC<AppProps> = ({ onLogout }) => {
   };
 
   const toggleDarkMode = () => {
-    setIsDarkMode(!isDarkMode);
+    setIsDarkMode(prev => !prev);
   };
+  
+  if (isLoadingData) {
+    return (
+      <div className="min-h-screen flex justify-center items-center bg-background dark:bg-gray-900">
+        <div className="flex items-center space-x-2">
+          <RefreshIcon className="animate-spin h-8 w-8 text-primary" />
+          <span className="text-xl font-semibold text-text-primary dark:text-white">Loading your data...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex justify-center items-center bg-background dark:bg-gray-900">
+        <div className="text-center p-4">
+          <h2 className="text-2xl font-bold text-red-500 mb-4">Oops! Something went wrong.</h2>
+          <p className="text-text-secondary dark:text-gray-400">{error}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background dark:bg-gray-900 font-sans">
       <Header 
         isDarkMode={isDarkMode} 
         toggleDarkMode={toggleDarkMode} 
-        onLogout={onLogout}
         currency={currency}
         onCurrencyChange={setCurrency}
         onAddTransaction={openAddModal}
       />
 
-      <main className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
-        <Dashboard transactions={transactions} currency={currency} />
-        
-        <AiContentAnalyzer />
-
-        <News />
-
-        <div className="mt-8">
-          <TransactionList
-            transactions={transactions}
-            onEditTransaction={openEditModal}
-            onDeleteTransaction={handleDeleteTransaction}
-            currency={currency}
-          />
-        </div>
+      <main className="max-w-7xl mx-auto">
+        <Routes>
+          <Route path="/" element={<DashboardPage transactions={transactions} currency={currency} />} />
+          <Route path="/transactions" element={<TransactionsPage currency={currency} />} />
+          <Route path="/budgets" element={<BudgetsGoalsPage currency={currency} transactions={transactions} />} />
+          <Route path="/horizon" element={<WealthHorizonPage transactions={transactions} currency={currency} />} />
+          <Route path="/insights" element={<InsightsPage transactions={transactions} currency={currency} />} />
+          <Route path="/news" element={<NewsPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </main>
 
-      {isFormModalOpen && (
-        <TransactionForm
-          isOpen={isFormModalOpen}
-          onClose={() => setIsFormModalOpen(false)}
-          onAdd={handleAddTransaction}
-          onEdit={handleEditTransaction}
-          transactionToEdit={editingTransaction}
-        />
-      )}
-
-      <AiChatbot transactions={transactions} />
+      <AiChatbot transactions={transactions} currency={currency} balance={balance} />
     </div>
   );
 };
