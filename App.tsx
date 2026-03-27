@@ -3,15 +3,9 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { Transaction, Currency, User } from './types';
 import Header from './components/Header';
 import TransactionForm from './components/TransactionForm';
-import { 
-  getTransactionsForUser, 
-  addTransactionForUser, 
-  updateTransactionForUser, 
-  deleteTransactionForUser, 
-  getUserPreferences, 
-  saveUserPreferences 
-} from './services/mockApiService';
-import { RefreshIcon } from './components/icons';
+import { api } from './services/api';
+import { RefreshIcon, PlusIcon } from './components/icons';
+import { motion, AnimatePresence } from 'motion/react';
 
 // Import Pages
 import DashboardPage from './pages/DashboardPage';
@@ -39,33 +33,32 @@ const App: React.FC<AppProps> = ({ user }) => {
   const balance = transactions.reduce((acc, t) => acc + (t.type === 'income' ? t.amount : -t.amount), 0);
 
   const fetchTransactions = useCallback(async () => {
-    if (!user) return;
     try {
-      const trans = await getTransactionsForUser(user.uid);
+      const trans = await api.getTransactions();
       setTransactions(trans.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     } catch (e) {
       console.error("Failed to fetch transactions", e);
       setError("Could not load your transactions. Please try refreshing.");
     }
-  }, [user]);
+  }, []);
 
   // Effect to load all user data on initial mount
   useEffect(() => {
     const loadData = async () => {
-      if (!user) return;
-
       try {
         setIsLoadingData(true);
         setError(null);
         
-        // Fetch preferences and transactions in parallel
-        const [prefs, trans] = await Promise.all([
-          getUserPreferences(user.uid),
-          getTransactionsForUser(user.uid)
-        ]);
+        const trans = await api.getTransactions();
         
-        setIsDarkMode(prefs.isDarkMode);
-        setCurrency(prefs.currency);
+        // Load preferences from local storage directly for now
+        const prefsJSON = localStorage.getItem(`finsight_preferences_${user.uid}`);
+        if (prefsJSON) {
+          const prefs = JSON.parse(prefsJSON);
+          setIsDarkMode(prefs.isDarkMode);
+          setCurrency(prefs.currency);
+        }
+
         setTransactions(trans.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
 
       } catch (e) {
@@ -88,30 +81,27 @@ const App: React.FC<AppProps> = ({ user }) => {
     }
 
     if (!isLoadingData && user) {
-        saveUserPreferences(user.uid, { isDarkMode, currency });
+        localStorage.setItem(`finsight_preferences_${user.uid}`, JSON.stringify({ isDarkMode, currency }));
     }
   }, [isDarkMode, currency, user, isLoadingData]);
 
 
   const handleAddTransaction = async (transaction: Omit<Transaction, 'id'>) => {
-    if (!user) return;
-    await addTransactionForUser(user.uid, transaction);
-    await fetchTransactions(); // Refetch to get the new transaction with its ID
+    await api.addTransaction(transaction);
+    await fetchTransactions();
     setIsFormModalOpen(false);
   };
 
   const handleEditTransaction = async (transaction: Transaction) => {
-    if (!user) return;
-    await updateTransactionForUser(user.uid, transaction);
-    await fetchTransactions(); // Refetch
+    await api.updateTransaction(transaction.id, transaction);
+    await fetchTransactions();
     setEditingTransaction(null);
     setIsFormModalOpen(false);
   };
 
   const handleDeleteTransaction = async (id: string) => {
-    if (!user) return;
-    await deleteTransactionForUser(user.uid, id);
-    await fetchTransactions(); // Refetch
+    await api.deleteTransaction(id);
+    await fetchTransactions();
   };
 
   const openAddModal = () => {
@@ -173,6 +163,37 @@ const App: React.FC<AppProps> = ({ user }) => {
       </main>
 
       <AiChatbot transactions={transactions} currency={currency} balance={balance} />
+
+      {/* Global Transaction Modal */}
+      <AnimatePresence>
+        {isFormModalOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="w-full max-w-2xl bg-white dark:bg-gray-800 rounded-[2.5rem] p-8 shadow-2xl relative"
+            >
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-2xl font-bold text-text-primary dark:text-white">
+                  {editingTransaction ? 'Edit Transaction' : 'New Transaction'}
+                </h2>
+                <button
+                  onClick={() => setIsFormModalOpen(false)}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+                >
+                  <PlusIcon className="w-6 h-6 rotate-45 text-gray-400" />
+                </button>
+              </div>
+              <TransactionForm
+                onSubmit={editingTransaction ? handleEditTransaction as any : handleAddTransaction}
+                currency={currency}
+                initialData={editingTransaction}
+              />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

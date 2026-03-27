@@ -98,6 +98,24 @@ const Header: React.FC<HeaderProps> = ({ isDarkMode, toggleDarkMode, currency, o
 
             <div className="h-8 w-px bg-gray-200 dark:bg-gray-800" />
 
+            <button
+              onClick={onAddTransaction}
+              className="hidden lg:flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
+            >
+              <PlusIcon className="w-5 h-5" />
+              <span>Add Transaction</span>
+            </button>
+
+            <button
+              onClick={onAddTransaction}
+              className="lg:hidden p-3 rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-500/20 active:scale-95"
+              aria-label="Add transaction"
+            >
+              <PlusIcon className="h-5 w-5" />
+            </button>
+
+            <div className="h-8 w-px bg-gray-200 dark:bg-gray-800" />
+
             {/* User Profile - Recipe 8/12 */}
             <button className="flex items-center gap-3 pl-1 pr-3 py-1 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded-2xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-all group">
               <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-xs shadow-lg shadow-indigo-500/20 group-hover:scale-110 transition-transform">
