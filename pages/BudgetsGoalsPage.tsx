@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Budget, Goal, Currency, CURRENCY_SYMBOLS, Category } from '../types';
+import { Budget, Goal, Currency, CURRENCY_SYMBOLS, Category, User } from '../types';
 import { api } from '../services/api';
 import { PlusIcon, TargetIcon, WalletIcon, TrendingUpIcon, CloseIcon, EditIcon, TrashIcon } from '../components/icons';
 import BudgetForm from '../components/BudgetForm';
@@ -9,9 +9,10 @@ import GoalForm from '../components/GoalForm';
 interface BudgetsGoalsPageProps {
   currency: Currency;
   transactions: any[];
+  user: User;
 }
 
-const BudgetsGoalsPage: React.FC<BudgetsGoalsPageProps> = ({ currency, transactions }) => {
+const BudgetsGoalsPage: React.FC<BudgetsGoalsPageProps> = ({ currency, transactions, user }) => {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,8 +32,8 @@ const BudgetsGoalsPage: React.FC<BudgetsGoalsPageProps> = ({ currency, transacti
   const fetchData = async () => {
     try {
       const [bData, gData] = await Promise.all([
-        api.getBudgets(),
-        api.getGoals()
+        api.getBudgets(user.uid),
+        api.getGoals(user.uid)
       ]);
       setBudgets(bData);
       setGoals(gData);
@@ -46,9 +47,9 @@ const BudgetsGoalsPage: React.FC<BudgetsGoalsPageProps> = ({ currency, transacti
   const handleBudgetSubmit = async (b: Omit<Budget, 'id'>) => {
     try {
       if (editingBudget) {
-        await api.updateBudget(editingBudget.id, b);
+        await api.updateBudget(user.uid, editingBudget.id, b);
       } else {
-        await api.addBudget(b);
+        await api.addBudget(user.uid, b);
       }
       setIsBudgetModalOpen(false);
       setEditingBudget(null);
@@ -61,9 +62,9 @@ const BudgetsGoalsPage: React.FC<BudgetsGoalsPageProps> = ({ currency, transacti
   const handleGoalSubmit = async (g: Omit<Goal, 'id'>) => {
     try {
       if (editingGoal) {
-        await api.updateGoal(editingGoal.id, g);
+        await api.updateGoal(user.uid, editingGoal.id, g);
       } else {
-        await api.addGoal(g);
+        await api.addGoal(user.uid, g);
       }
       setIsGoalModalOpen(false);
       setEditingGoal(null);
@@ -76,7 +77,7 @@ const BudgetsGoalsPage: React.FC<BudgetsGoalsPageProps> = ({ currency, transacti
   const handleDeleteBudget = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this budget?')) {
       try {
-        await api.deleteBudget(id);
+        await api.deleteBudget(user.uid, id);
         fetchData();
       } catch (error) {
         console.error('Error deleting budget:', error);
@@ -87,7 +88,7 @@ const BudgetsGoalsPage: React.FC<BudgetsGoalsPageProps> = ({ currency, transacti
   const handleDeleteGoal = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this goal?')) {
       try {
-        await api.deleteGoal(id);
+        await api.deleteGoal(user.uid, id);
         fetchData();
       } catch (error) {
         console.error('Error deleting goal:', error);
