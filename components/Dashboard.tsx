@@ -1,7 +1,7 @@
 
 import React, { useMemo, useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { Transaction, TransactionType, Currency, CURRENCY_SYMBOLS, Bill, Budget, FinancialHealthScore } from '../types';
+import { Transaction, TransactionType, Currency, CURRENCY_SYMBOLS, Bill, Budget, FinancialHealthScore, User } from '../types';
 import CategoryPieChart from './CategoryPieChart';
 import ExpenseTrendChart from './ExpenseTrendChart';
 import FinancialStressTest from './FinancialStressTest';
@@ -15,9 +15,10 @@ import { api } from '../services/api';
 interface DashboardProps {
   transactions: Transaction[];
   currency: Currency;
+  user: User;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ transactions, currency }) => {
+const Dashboard: React.FC<DashboardProps> = ({ transactions, currency, user }) => {
   const [bills, setBills] = useState<Bill[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [healthScore, setHealthScore] = useState<FinancialHealthScore | null>(null);
@@ -25,8 +26,8 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, currency }) => {
   useEffect(() => {
     const fetchData = async () => {
       const [billsData, budgetsData, healthData] = await Promise.all([
-        api.getBills(),
-        api.getBudgets(),
+        api.getBills(user.uid),
+        api.getBudgets(user.uid),
         api.getHealthScore()
       ]);
       setBills(billsData);

@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Transaction, TransactionType, Category, Currency, CURRENCY_SYMBOLS } from '../types';
+import { Transaction, TransactionType, Category, Currency, CURRENCY_SYMBOLS, User } from '../types';
 import { api } from '../services/api';
 import { PlusIcon, SearchIcon, FilterIcon, TrashIcon, EditIcon, ArrowUpIcon, ArrowDownIcon } from '../components/icons';
 import TransactionForm from '../components/TransactionForm';
 
 interface TransactionsPageProps {
   currency: Currency;
+  user: User;
 }
 
-const TransactionsPage: React.FC<TransactionsPageProps> = ({ currency }) => {
+const TransactionsPage: React.FC<TransactionsPageProps> = ({ currency, user }) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -28,7 +29,7 @@ const TransactionsPage: React.FC<TransactionsPageProps> = ({ currency }) => {
 
   const fetchTransactions = async () => {
     try {
-      const data = await api.getTransactions();
+      const data = await api.getTransactions(user.uid);
       setTransactions(data);
     } catch (error) {
       console.error('Error fetching transactions:', error);
@@ -39,7 +40,7 @@ const TransactionsPage: React.FC<TransactionsPageProps> = ({ currency }) => {
 
   const handleAddTransaction = async (t: Omit<Transaction, 'id'>) => {
     try {
-      await api.addTransaction(t);
+      await api.addTransaction(user.uid, t);
       fetchTransactions();
       setShowForm(false);
     } catch (error) {
@@ -49,7 +50,7 @@ const TransactionsPage: React.FC<TransactionsPageProps> = ({ currency }) => {
 
   const handleDeleteTransaction = async (id: string) => {
     try {
-      await api.deleteTransaction(id);
+      await api.deleteTransaction(user.uid, id);
       fetchTransactions();
     } catch (error) {
       console.error('Error deleting transaction:', error);
@@ -58,7 +59,7 @@ const TransactionsPage: React.FC<TransactionsPageProps> = ({ currency }) => {
 
   const handleBulkDelete = async () => {
     try {
-      await Promise.all(selectedTransactions.map(id => api.deleteTransaction(id)));
+      await Promise.all(selectedTransactions.map(id => api.deleteTransaction(user.uid, id)));
       setSelectedTransactions([]);
       fetchTransactions();
     } catch (error) {
