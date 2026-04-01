@@ -14,23 +14,34 @@ const __dirname = path.dirname(__filename);
 const DATA_FILE = path.join(__dirname, 'data.json');
 
 async function loadData() {
+  const defaultData = {
+    transactions: [],
+    budgets: [],
+    goals: [],
+    bills: [
+      { id: '1', name: 'Electricity Bill', amount: 1200, dueDate: '2026-04-05', isPaid: false, category: 'Utilities' },
+      { id: '2', name: 'Internet', amount: 800, dueDate: '2026-04-10', isPaid: true, category: 'Utilities' },
+    ],
+    portfolio: [
+      { id: '1', symbol: 'RELIANCE', name: 'Reliance Industries', quantity: 10, averagePrice: 2400, currentPrice: 2850, type: 'stock' },
+      { id: '2', symbol: 'BTC', name: 'Bitcoin', quantity: 0.05, averagePrice: 45000, currentPrice: 65000, type: 'crypto' },
+    ]
+  };
+
   try {
     const data = await fs.readFile(DATA_FILE, 'utf-8');
-    return JSON.parse(data);
-  } catch (error) {
+    const parsed = JSON.parse(data);
     return {
-      transactions: [],
-      budgets: [],
-      goals: [],
-      bills: [
-        { id: '1', name: 'Electricity Bill', amount: 1200, dueDate: '2026-04-05', isPaid: false, category: 'Utilities' },
-        { id: '2', name: 'Internet', amount: 800, dueDate: '2026-04-10', isPaid: true, category: 'Utilities' },
-      ],
-      portfolio: [
-        { id: '1', symbol: 'RELIANCE', name: 'Reliance Industries', quantity: 10, averagePrice: 2400, currentPrice: 2850, type: 'stock' },
-        { id: '2', symbol: 'BTC', name: 'Bitcoin', quantity: 0.05, averagePrice: 45000, currentPrice: 65000, type: 'crypto' },
-      ]
+      ...defaultData,
+      ...parsed,
+      transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
+      budgets: Array.isArray(parsed.budgets) ? parsed.budgets : [],
+      goals: Array.isArray(parsed.goals) ? parsed.goals : [],
+      bills: Array.isArray(parsed.bills) ? parsed.bills : defaultData.bills,
+      portfolio: Array.isArray(parsed.portfolio) ? parsed.portfolio : defaultData.portfolio,
     };
+  } catch (error) {
+    return defaultData;
   }
 }
 

@@ -30,12 +30,14 @@ const App: React.FC<AppProps> = ({ user }) => {
   const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const balance = transactions.reduce((acc, t) => acc + (t.type === 'income' ? t.amount : -t.amount), 0);
+  const balance = transactions.reduce((acc, t) => acc + (t.type === 'Income' ? t.amount : -t.amount), 0);
 
   const fetchTransactions = useCallback(async () => {
     try {
       const trans = await api.getTransactions();
-      setTransactions(trans.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+      if (Array.isArray(trans)) {
+        setTransactions(trans.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+      }
     } catch (e) {
       console.error("Failed to fetch transactions", e);
       setError("Could not load your transactions. Please try refreshing.");
@@ -54,12 +56,18 @@ const App: React.FC<AppProps> = ({ user }) => {
         // Load preferences from local storage directly for now
         const prefsJSON = localStorage.getItem(`finsight_preferences_${user.uid}`);
         if (prefsJSON) {
-          const prefs = JSON.parse(prefsJSON);
-          setIsDarkMode(prefs.isDarkMode);
-          setCurrency(prefs.currency);
+          try {
+            const prefs = JSON.parse(prefsJSON);
+            setIsDarkMode(!!prefs.isDarkMode);
+            if (prefs.currency) setCurrency(prefs.currency);
+          } catch (prefError) {
+            console.warn("Failed to parse preferences from localStorage", prefError);
+          }
         }
 
-        setTransactions(trans.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        if (Array.isArray(trans)) {
+          setTransactions(trans.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        }
 
       } catch (e) {
         console.error("Failed to load user data", e);
