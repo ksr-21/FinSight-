@@ -14,7 +14,7 @@ export const geminiService = {
   // Auto-categorize a transaction description
   categorizeTransaction: async (description: string): Promise<Category> => {
     const ai = getAiInstance();
-    const model = "gemini-3-flash-preview";
+    const model = "gemini-1.5-flash";
     const prompt = `Categorize this financial transaction description into one of these categories: ${Object.values(Category).join(", ")}. 
     Description: "${description}"
     Return only the category name.`;
@@ -35,7 +35,7 @@ export const geminiService = {
   // Generate spending insights and suggestions
   getFinancialInsights: async (transactions: Transaction[], budgets: any[]): Promise<string[]> => {
     const ai = getAiInstance();
-    const model = "gemini-3-flash-preview";
+    const model = "gemini-1.5-flash";
     const summary = transactions.slice(0, 20).map(t => `${t.date}: ${t.description} - ${t.amount} (${t.category})`).join("\n");
     const prompt = `Analyze these recent transactions and provide 3 actionable financial tips or observations. 
     Keep them short, professional, and encouraging.
@@ -49,7 +49,9 @@ export const geminiService = {
         contents: prompt,
         config: { responseMimeType: "application/json" }
       });
-      return JSON.parse(response.text);
+      // Handle potential markdown formatting in JSON response
+      const cleanText = response.text.replace(/```json\n?|\n?```/g, '').trim();
+      return JSON.parse(cleanText);
     } catch (error) {
       console.error("AI Insights failed:", error);
       return ["Keep tracking your expenses to get personalized insights.", "Consider setting up a budget for better control.", "You're doing great! Keep it up."];
@@ -59,7 +61,7 @@ export const geminiService = {
   // Chatbot response
   getChatResponse: async (message: string, context: { transactions: Transaction[], balance: number }): Promise<string> => {
     const ai = getAiInstance();
-    const model = "gemini-3-flash-preview";
+    const model = "gemini-1.5-flash";
     const prompt = `You are FinSight AI, a professional financial assistant. 
     User Question: "${message}"
     User Context: Current Balance: ${context.balance}, Recent Transactions: ${context.transactions.slice(0, 5).map(t => t.description).join(", ")}
@@ -80,7 +82,7 @@ export const geminiService = {
   // Predict future expenses
   getExpenseForecast: async (transactions: Transaction[]): Promise<{ nextWeek: number, nextMonth: number, reasoning: string }> => {
     const ai = getAiInstance();
-    const model = "gemini-3-flash-preview";
+    const model = "gemini-1.5-flash";
     const expenses = transactions.filter(t => t.type === 'Expense');
     const summary = expenses.slice(0, 50).map(t => `${t.date}: ${t.amount} (${t.category})`).join("\n");
     
@@ -98,7 +100,9 @@ export const geminiService = {
         contents: prompt,
         config: { responseMimeType: "application/json" }
       });
-      return JSON.parse(response.text);
+      // Handle potential markdown formatting in JSON response
+      const cleanText = response.text.replace(/```json\n?|\n?```/g, '').trim();
+      return JSON.parse(cleanText);
     } catch (error) {
       console.error("AI Forecast failed:", error);
       // Fallback calculation

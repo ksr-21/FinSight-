@@ -1,0 +1,63 @@
+{
+  "transactions": [
+    {
+      "description": "Test Transaction",
+      "amount": 100,
+      "type": "Expense",
+      "category": "Food",
+      "date": "2023-10-27",
+      "id": "y9nos30ne"
+    },
+    {
+      "description": "Playwright Test Transaction",
+      "amount": 150,
+      "type": "Expense",
+      "category": "Food",
+      "date": "2026-04-01",
+      "notes": "",
+      "isRecurring": false,
+      "isSplit": false,
+      "id": "91gmhm4a2"
+    }
+  ],
+  "budgets": [],
+  "goals": [],
+  "bills": [
+    {
+      "id": "1",
+      "name": "Electricity Bill",
+      "amount": 1200,
+      "dueDate": "2026-04-05",
+      "isPaid": false,
+      "category": "Utilities"
+    },
+    {
+      "id": "2",
+      "name": "Internet",
+      "amount": 800,
+      "dueDate": "2026-04-10",
+      "isPaid": true,
+      "category": "Utilities"
+    }
+  ],
+  "portfolio": [
+    {
+      "id": "1",
+      "symbol": "RELIANCE",
+      "name": "Reliance Industries",
+      "quantity": 10,
+      "averagePrice": 2400,
+      "currentPrice": 2850,
+      "type": "stock"
+    },
+    {
+      "id": "2",
+      "symbol": "BTC",
+      "name": "Bitcoin",
+      "quantity": 0.05,
+      "averagePrice": 45000,
+      "currentPrice": 65000,
+      "type": "crypto"
+    }
+  ]
+}

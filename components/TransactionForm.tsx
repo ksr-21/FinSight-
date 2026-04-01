@@ -31,7 +31,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, currency, i
       setDate(initialData.date);
       setNotes(initialData.notes || '');
       setIsRecurring(!!initialData.isRecurring);
-      setRecurringInterval(initialData.recurringInterval || 'monthly');
+      setRecurringInterval(initialData.recurringFrequency || 'monthly');
     }
   }, [initialData]);
 

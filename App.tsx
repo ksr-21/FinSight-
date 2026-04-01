@@ -92,11 +92,13 @@ const App: React.FC<AppProps> = ({ user }) => {
     setIsFormModalOpen(false);
   };
 
-  const handleEditTransaction = async (transaction: Transaction) => {
-    await api.updateTransaction(transaction.id, transaction);
-    await fetchTransactions();
-    setEditingTransaction(null);
-    setIsFormModalOpen(false);
+  const handleEditTransaction = async (transactionData: Omit<Transaction, 'id'>) => {
+    if (editingTransaction) {
+      await api.updateTransaction(editingTransaction.id, transactionData);
+      await fetchTransactions();
+      setEditingTransaction(null);
+      setIsFormModalOpen(false);
+    }
   };
 
   const handleDeleteTransaction = async (id: string) => {
@@ -186,7 +188,7 @@ const App: React.FC<AppProps> = ({ user }) => {
                 </button>
               </div>
               <TransactionForm
-                onSubmit={editingTransaction ? handleEditTransaction as any : handleAddTransaction}
+                onSubmit={editingTransaction ? handleEditTransaction : handleAddTransaction}
                 currency={currency}
                 initialData={editingTransaction}
               />
